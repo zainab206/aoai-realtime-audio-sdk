@@ -28,6 +28,14 @@ interface UserMessage {
   text: string;
 }
 
+interface InitMessage {
+  id: string;
+  type: "init";
+  session: {
+    instructions: string | undefined;
+  };
+}
+
 interface SpeechStarted {
   type: "control";
   action: "speech_started";
@@ -47,7 +55,12 @@ interface TextDone {
 
 type ControlMessage = SpeechStarted | Connected | TextDone;
 
-type WSMessage = TextDelta | Transcription | UserMessage | ControlMessage;
+type WSMessage =
+  | TextDelta
+  | Transcription
+  | UserMessage
+  | ControlMessage
+  | InitMessage;
 
 export class RTSession {
   private client: RTClient;
@@ -63,12 +76,13 @@ export class RTSession {
     this.setupEventHandlers();
 
     this.logger.info("New session created");
-    this.initialize();
+    // this.initialize();
   }
 
-  async initialize() {
+  async initialize(instructions: string | undefined) {
     this.logger.debug("Configuring realtime session");
     await this.client.configure({
+      instructions: instructions,
       modalities: ["text", "audio"],
       input_audio_format: "pcm16",
       input_audio_transcription: {
@@ -105,8 +119,8 @@ export class RTSession {
     if (backend === "azure") {
       return new RTClient(
         new URL(process.env.AZURE_OPENAI_ENDPOINT!),
-        new DefaultAzureCredential(),
-        { deployment: process.env.AZURE_OPENAI_DEPLOYMENT! },
+        new AzureKeyCredential(process.env.AZURE_OPENAI_API_KEY!),
+        { deployment: process.env.AZURE_OPENAI_DEPLOYMENT! }
       );
     }
     return new RTClient(new AzureKeyCredential(process.env.OPENAI_API_KEY!), {
@@ -162,6 +176,15 @@ export class RTSession {
         this.logger.debug("User message processed successfully");
       } catch (error) {
         this.logger.error({ error }, "Failed to process user message");
+        throw error;
+      }
+    }
+    if (parsed.type === "init") {
+      try {
+        await this.initialize(parsed.session.instructions);
+        this.logger.debug("Session initialized.");
+      } catch (error) {
+        this.logger.error({ error }, "Failed to process system message");
         throw error;
       }
     }
@@ -252,7 +275,7 @@ export class RTSession {
       this.send(transcription);
       this.logger.debug(
         { transcriptionLength: transcription.text.length },
-        "Input audio processed successfully",
+        "Input audio processed successfully"
       );
     } catch (error) {
       this.logger.error({ error }, "Error handling input audio");

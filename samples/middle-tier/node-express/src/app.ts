@@ -7,9 +7,9 @@ import http from "http";
 import { config } from "dotenv";
 import { pino } from "pino";
 import { RTSession } from "./session.js";
+import bodyParser from "body-parser";
 
 config();
-
 const logger = pino({
   level: process.env.LOG_LEVEL || "info",
   transport: {
@@ -21,6 +21,9 @@ const logger = pino({
 });
 
 const app = express();
+
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json({ limit: "50mb" }));
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 

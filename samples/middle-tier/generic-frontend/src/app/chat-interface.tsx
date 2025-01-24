@@ -23,7 +23,7 @@ type WSControlAction = "speech_started" | "connected" | "text_done";
 
 interface WSMessage {
   id?: string;
-  type: "text_delta" | "transcription" | "user_message" | "control";
+  type: "text_delta" | "transcription" | "user_message" | "control"| "init";
   delta?: string;
   text?: string;
   action?: WSControlAction;
@@ -78,8 +78,10 @@ const useAudioHandlers = () => {
 
 const ChatInterface = () => {
   const [endpoint, setEndpoint] = useState("ws://localhost:8080/realtime");
+  const [accordionValue, setAccordionValue] = useState(["connection","instruction"]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentMessage, setCurrentMessage] = useState("");
+  const [currentInstruction, setCurrentInstruction] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -174,6 +176,7 @@ const ChatInterface = () => {
   setIsConnecting(true);
       try {
         webSocketClient.current = new WebSocketClient(new URL(endpoint));
+        await sendInstruction()
         setIsConnected(true);
         receiveLoop();
       } catch (error) {
@@ -219,6 +222,21 @@ const ChatInterface = () => {
     }
   };
 
+
+  const sendInstruction = async () => {
+    if (currentInstruction.trim() && webSocketClient.current) {
+      const instructionMessage = {
+        type: "init",
+        session: {instructions: currentInstruction},
+      };
+      await webSocketClient.current.send({
+        type: "text",
+        data: JSON.stringify(instructionMessage),
+      });
+      // setCurrentInstruction("");
+    }
+  };
+
   const toggleRecording = async () => {
     try {
       const newRecordingState = await handleAudioRecord(
@@ -252,7 +270,7 @@ const ChatInterface = () => {
     <div className="flex h-screen">
       <div className="w-80 bg-gray-50 p-4 flex flex-col border-r">
         <div className="flex-1 overflow-y-auto">
-          <Accordion type="single" className="space-y-4" value="connection">
+          <Accordion type="multiple" className="space-y-4" value={accordionValue} onValueChange={setAccordionValue}>
             <AccordionItem value="connection">
               <AccordionTrigger className="text-lg font-semibold">
                 Middle Tier Endpoint
@@ -264,6 +282,25 @@ const ChatInterface = () => {
                   onChange={(e) => validateEndpoint(e.target.value)}
                   disabled={isConnected}
                 />
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="instruction">
+              <AccordionTrigger className="text-lg font-semibold">
+                Instruction
+              </AccordionTrigger>
+              <AccordionContent className="space-y-4">
+                <textarea
+                  rows={10} // Set the minimum number of rows
+                  className="w-full p-2 border rounded resize-none"
+                  placeholder="Type your instruction..."
+                  value={currentInstruction}
+                  onChange={(e) => setCurrentInstruction(e.target.value)}
+                  // onKeyUp={(e) => e.key === "Enter" && sendInstruction()}
+                  disabled={isConnected}
+                />
+                {/* <Button onClick={sendInstruction} disabled={!isConnected}>
+                  Send Instruction
+                </Button> */}
               </AccordionContent>
             </AccordionItem>
           </Accordion>
